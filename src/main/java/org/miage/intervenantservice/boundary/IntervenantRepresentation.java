@@ -21,7 +21,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.transaction.Transactional;
+import javax.validation.Valid;
+
+import org.miage.intervenantservice.assembler.IntervenantAssembler;
 import org.miage.intervenantservice.entity.Intervenant;
+import org.miage.intervenantservice.entity.IntervenantInput;
+import org.miage.intervenantservice.entity.IntervenantValidator;
 
 @RestController
 @RequestMapping(value="/intervenants", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -29,29 +34,34 @@ import org.miage.intervenantservice.entity.Intervenant;
 public class IntervenantRepresentation {
 
     private final IntervenantResource ir;
+    private final IntervenantAssembler assembler;
+    private final IntervenantValidator validator;
 
-    public IntervenantRepresentation(IntervenantResource ir) {
+    public IntervenantRepresentation(IntervenantResource ir, 
+                                    IntervenantAssembler assembler,
+                                    IntervenantValidator validator) {
         this.ir = ir;
+        this.assembler = assembler;
+        this.validator = validator;
     }
 
     // GET all
     @GetMapping
     public ResponseEntity<?> getAllIntervenants() {
-        Iterable<Intervenant> allIntervenants = ir.findAll();
-        return ResponseEntity.ok(allIntervenants);
+        return ResponseEntity.ok(assembler.toCollectionModel(ir.findAll()));
     }
 
     // GET one
     @GetMapping(value="/{intervenantId}")
     public ResponseEntity<?> getOneIntervenant(@PathVariable("intervenantId") String id) {
         return Optional.ofNullable(ir.findById(id)).filter(Optional::isPresent)
-                .map(i -> ResponseEntity.ok(i.get()))
+                .map(i -> ResponseEntity.ok(assembler.toModel(i.get())))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
     @Transactional
-    public ResponseEntity<?> saveIntervenant(@RequestBody Intervenant intervenant)  {
+    public ResponseEntity<?> saveIntervenant(@RequestBody @Valid IntervenantInput intervenant)  {
         Intervenant intervenant2Save = new Intervenant(
             UUID.randomUUID().toString(),
             intervenant.getNom(),
@@ -105,6 +115,8 @@ public class IntervenantRepresentation {
                 field.setAccessible(true);
                 ReflectionUtils.setField(field, intervenant, v);
             });
+            validator.validate(new IntervenantInput(intervenant.getNom(), intervenant.getPrenom(),
+            intervenant.getCommune(), intervenant.getCodepostal()));
             intervenant.setId(intervenantId);
             ir.save(intervenant);
             return ResponseEntity.ok().build();
